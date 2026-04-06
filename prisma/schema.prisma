@@ -1,0 +1,81 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id          String               @id @default(cuid())
+  email       String               @unique
+  password    String
+  role        String               @default("student")
+  credits     Int                  @default(0)
+
+  courses     CourseAccess[]
+  chatHistory ChatHistory[]
+  transactions CreditTransaction[]
+  createdCourses Course[]          @relation("CreatedBy")
+}
+
+model Course {
+  id          String          @id @default(cuid())
+  title       String
+  description String?
+  createdBy   String
+  creator     User            @relation("CreatedBy", fields: [createdBy], references: [id], onDelete: Cascade)
+
+  videos      Video[]
+  access      CourseAccess[]
+  chatHistory ChatHistory[]
+  vectorCollections VectorCollection[]
+}
+
+model Video {
+  id               String  @id @default(cuid())
+  courseId         String
+  videoUrl         String
+  transcriptSource String?
+
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+}
+
+model CourseAccess {
+  userId   String
+  courseId String
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@id([userId, courseId])
+}
+
+model ChatHistory {
+  id       String @id @default(cuid())
+  userId   String
+  courseId String
+  question String
+  answer   String
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+}
+
+model CreditTransaction {
+  id          String @id @default(cuid())
+  userId      String
+  creditsUsed Int
+  type        String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VectorCollection {
+  id             String @id @default(cuid())
+  courseId       String
+  collectionName String
+
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+}
