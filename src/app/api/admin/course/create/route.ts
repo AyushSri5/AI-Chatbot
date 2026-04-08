@@ -1,15 +1,36 @@
 import { prisma } from '@/lib/prisma'
 import { NextRequest, NextResponse } from 'next/server'
+import { verify } from 'jsonwebtoken'
 
 export async function POST(req: NextRequest) {
   try {
     const { title, category, level, description } = await req.json()
 
-    // Get user from token
+    // Get token from cookies
     const token = req.cookies.get('token')?.value
     if (!token) {
       return NextResponse.json(
         { error: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
+
+    // Decode JWT token to get user ID
+    let userId: string
+    try {
+      const decoded = verify(token, process.env.JWT_SECRET || 'fallback_secret') as any
+      userId = decoded.id
+      
+      // Verify user is admin
+      if (decoded.role !== 'admin') {
+        return NextResponse.json(
+          { error: 'Only admins can create courses' },
+          { status: 403 }
+        )
+      }
+    } catch (err) {
+      return NextResponse.json(
+        { error: 'Invalid token' },
         { status: 401 }
       )
     }
@@ -22,16 +43,12 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // For now, we'll use a hardcoded admin user ID
-    // In production, you'd decode the JWT token to get the actual user ID
-    const adminUserId = 'admin-user-id' // This should come from token
-
     // Create the course
     const course = await prisma.course.create({
       data: {
         title,
         description,
-        createdBy: adminUserId,
+        createdBy: userId,
       },
     })
 
