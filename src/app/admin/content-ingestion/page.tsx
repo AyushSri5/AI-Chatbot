@@ -31,6 +31,9 @@ export default function ContentIngestionPage() {
     url: string
   }>>([])
   const [playlistError, setPlaylistError] = useState('')
+  const [ingesting, setIngesting] = useState(false)
+  const [ingestionError, setIngestionError] = useState('')
+  const [ingestionSuccess, setIngestionSuccess] = useState(false)
 
   useEffect(() => {
     if (!courseId) {
@@ -95,6 +98,61 @@ export default function ContentIngestionPage() {
       setPlaylistError('An error occurred while fetching the playlist')
     } finally {
       setFetchingPlaylist(false)
+    }
+  }
+
+  const handleStartIngestion = async () => {
+    if (!courseId) {
+      setIngestionError('Course ID is missing')
+      return
+    }
+
+    if (!playlistUrl && uploadedFiles.length === 0) {
+      setIngestionError('Please provide either a playlist URL or upload VTT files')
+      return
+    }
+
+    setIngesting(true)
+    setIngestionError('')
+    setIngestionSuccess(false)
+
+    try {
+      // Read VTT file content if uploaded
+      let vttContent = ''
+      if (uploadedFiles.length > 0) {
+        const file = uploadedFiles[0]
+        vttContent = await file.text()
+      }
+
+      const res = await fetch('/api/admin/ingestion', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          courseId,
+          playlistUrl: playlistUrl || undefined,
+          vttContent: vttContent || undefined,
+          overlapTokens: Number(overlapTokens),
+          embeddingModel: embedding,
+        }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        setIngestionError(data.error || data.message || 'Ingestion failed')
+        return
+      }
+
+      setIngestionSuccess(true)
+      // Optionally redirect after success
+      setTimeout(() => {
+        router.push('/admin/dashboard')
+      }, 2000)
+    } catch (error) {
+      console.error('Error during ingestion:', error)
+      setIngestionError('An error occurred during ingestion')
+    } finally {
+      setIngesting(false)
     }
   }
 
@@ -292,10 +350,26 @@ export default function ContentIngestionPage() {
             </div>
             <h3 className="font-bold text-slate-900">Knowledge Fragmentation</h3>
           </div>
-          <button className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded transition text-sm flex items-center gap-2">
-            Finalize & Start Training 🚀
+          <button
+            onClick={handleStartIngestion}
+            disabled={ingesting}
+            className="px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold rounded transition text-sm flex items-center gap-2"
+          >
+            {ingesting ? 'Processing...' : 'Finalize & Start Training'} 🚀
           </button>
         </div>
+
+        {ingestionError && (
+          <div className="p-4 bg-red-50 border border-red-200 rounded text-sm text-red-700 mb-6">
+            {ingestionError}
+          </div>
+        )}
+
+        {ingestionSuccess && (
+          <div className="p-4 bg-green-50 border border-green-200 rounded text-sm text-green-700 mb-6">
+            ✓ Ingestion completed successfully! Redirecting to dashboard...
+          </div>
+        )}
 
         <p className="text-slate-700 mb-6 leading-relaxed">
           Configure how the AI chunks the content. Smaller chunks provide more granular retrieval but may lose broad context. Default is set to 512 tokens with 10% overlap.
@@ -303,7 +377,7 @@ export default function ContentIngestionPage() {
 
         <div className="grid grid-cols-2 gap-8">
           <div>
-            <label htmlFor="overlap-tokens" className="block text-xs font-bold text-slate-900 mb-3 tracking-wide">Overlap: 50 tokens</label>
+            <label htmlFor="overlap-tokens" className="block text-xs font-bold text-slate-900 mb-3 tracking-wide">Overlap: {overlapTokens} tokens</label>
             <input
               id="overlap-tokens"
               type="range"
@@ -315,7 +389,7 @@ export default function ContentIngestionPage() {
             />
           </div>
           <div>
-            <label htmlFor="embedding-model" className="block text-xs font-bold text-slate-900 mb-3 tracking-wide">Embedding: Titan-V2</label>
+            <label htmlFor="embedding-model" className="block text-xs font-bold text-slate-900 mb-3 tracking-wide">Embedding: {embedding}</label>
             <select
               id="embedding-model"
               value={embedding}

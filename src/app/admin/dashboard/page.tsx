@@ -137,7 +137,7 @@ export default function AdminDashboardPage() {
           </thead>
           <tbody>
             {DUMMY_COURSES.map((course, idx) => (
-              <tr key={course.id} className={idx !== DUMMY_COURSES.length - 1 ? 'border-b border-slate-200' : ''}>
+              <tr key={course.id} className={idx < DUMMY_COURSES.length - 1 ? 'border-b border-slate-200' : ''}>
                 <td className="px-6 py-4">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-teal-100 rounded flex items-center justify-center text-lg">
@@ -152,18 +152,20 @@ export default function AdminDashboardPage() {
                 <td className="px-6 py-4 text-slate-700 font-medium">{course.modules}</td>
                 <td className="px-6 py-4 text-slate-700">{course.dateAdded}</td>
                 <td className="px-6 py-4">
-                  <span
-                    className={`inline-flex items-center gap-1 px-3 py-1 rounded text-xs font-semibold ${
-                      course.statusColor === 'blue'
-                        ? 'bg-blue-100 text-blue-700'
-                        : course.statusColor === 'cyan'
-                        ? 'bg-cyan-100 text-cyan-700'
-                        : 'bg-red-100 text-red-700'
-                    }`}
-                  >
-                    <span className="w-2 h-2 rounded-full bg-current"></span>
-                    {course.status}
-                  </span>
+                  {(() => {
+                    let statusClass = 'bg-blue-100 text-blue-700'
+                    if (course.statusColor === 'cyan') {
+                      statusClass = 'bg-cyan-100 text-cyan-700'
+                    } else if (course.statusColor === 'red') {
+                      statusClass = 'bg-red-100 text-red-700'
+                    }
+                    return (
+                      <span className={`inline-flex items-center gap-1 px-3 py-1 rounded text-xs font-semibold ${statusClass}`}>
+                        <span className="w-2 h-2 rounded-full bg-current"></span>
+                        {course.status}
+                      </span>
+                    )
+                  })()}
                 </td>
                 <td className="px-6 py-4">
                   {course.hasError ? (
@@ -198,7 +200,7 @@ export default function AdminDashboardPage() {
               </div>
             </div>
             <p className="text-sm text-slate-700 mb-6">
-              Found 1 synchronization error in "Applied Mathematics". The source PDF has a corrupted header. Would you like to re-upload or skip the first 3 pages?
+              Found 1 synchronization error in &quot;Applied Mathematics&quot;. The source PDF has a corrupted header. Would you like to re-upload or skip the first 3 pages?
             </p>
             <div className="flex gap-3">
               <button

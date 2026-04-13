@@ -4,10 +4,10 @@ import { verify } from 'jsonwebtoken'
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const courseId = params.id
+    const { id: courseId } = await params
 
     // Get token from cookies
     const token = req.cookies.get('token')?.value
@@ -29,6 +29,7 @@ export async function GET(
         )
       }
     } catch (err) {
+      console.error('Token verification error:', err)
       return NextResponse.json(
         { error: 'Invalid token' },
         { status: 401 }
