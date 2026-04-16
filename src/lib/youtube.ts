@@ -44,10 +44,12 @@ function extractPlaylistId(url: string): string | null {
  * Requires YOUTUBE_API_KEY environment variable
  * 
  * @param playlistUrl - YouTube playlist URL or playlist ID
+ * @param maxResults - Maximum number of videos to fetch (default: 500)
  * @returns Promise with array of videos or error
  */
 export async function getPlaylistVideos(
-  playlistUrl: string
+  playlistUrl: string,
+  maxResults: number = 500
 ): Promise<PlaylistResponse> {
   try {
     const apiKey = process.env.YOUTUBE_API_KEY
@@ -68,9 +70,15 @@ export async function getPlaylistVideos(
 
     const videos: YouTubeVideo[] = []
     let pageToken: string | undefined
+    let totalFetched = 0
 
-    // Fetch all pages of playlist items
+    // Fetch all pages of playlist items with limit
     do {
+      if (totalFetched >= maxResults) {
+        console.log(`Reached maximum playlist size limit of ${maxResults} videos`)
+        break
+      }
+
       const playlistItemsUrl = new URL(
         'https://www.googleapis.com/youtube/v3/playlistItems'
       )
@@ -83,7 +91,9 @@ export async function getPlaylistVideos(
         playlistItemsUrl.searchParams.append('pageToken', pageToken)
       }
 
-      const playlistResponse = await fetch(playlistItemsUrl.toString())
+      const playlistResponse = await fetch(playlistItemsUrl.toString(), {
+        signal: AbortSignal.timeout(30000), // 30 second timeout
+      })
 
       if (!playlistResponse.ok) {
         const errorData = await playlistResponse.json()
@@ -111,7 +121,9 @@ export async function getPlaylistVideos(
       videosUrl.searchParams.append('part', 'snippet,contentDetails')
       videosUrl.searchParams.append('key', apiKey)
 
-      const videosResponse = await fetch(videosUrl.toString())
+      const videosResponse = await fetch(videosUrl.toString(), {
+        signal: AbortSignal.timeout(30000), // 30 second timeout
+      })
 
       if (!videosResponse.ok) {
         const errorData = await videosResponse.json()
@@ -136,21 +148,24 @@ export async function getPlaylistVideos(
         }
         contentDetails: { duration: string }
       }) => {
-        videos.push({
-          id: video.id,
-          title: video.snippet.title,
-          description: video.snippet.description,
-          thumbnail:
-            video.snippet.thumbnails.high?.url ||
-            video.snippet.thumbnails.default?.url ||
-            '',
-          duration: video.contentDetails.duration,
-          url: `https://www.youtube.com/watch?v=${video.id}`,
-        })
+        if (totalFetched < maxResults) {
+          videos.push({
+            id: video.id,
+            title: video.snippet.title,
+            description: video.snippet.description,
+            thumbnail:
+              video.snippet.thumbnails.high?.url ||
+              video.snippet.thumbnails.default?.url ||
+              '',
+            duration: video.contentDetails.duration,
+            url: `https://www.youtube.com/watch?v=${video.id}`,
+          })
+          totalFetched++
+        }
       })
 
       pageToken = playlistData.nextPageToken
-    } while (pageToken)
+    } while (pageToken && totalFetched < maxResults)
 
     return { videos }
   } catch (error) {

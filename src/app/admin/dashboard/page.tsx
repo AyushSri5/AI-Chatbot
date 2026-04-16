@@ -1,55 +1,63 @@
 'use client'
 
-import { useState } from 'react'
-
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 
-const DUMMY_COURSES = [
-  {
-    id: 1,
-    name: 'Introduction to Cyber Ethics',
-    category: 'Computer Science • Level 101',
-    modules: '12 Units',
-    dateAdded: 'Oct 12, 2023',
-    status: 'READY',
-    statusColor: 'blue',
-    icon: '🔒',
-  },
-  {
-    id: 2,
-    name: 'Neural Networks & Deep Learning',
-    category: 'Advanced AI • Level 400',
-    modules: '08 Units',
-    dateAdded: 'Nov 02, 2023',
-    status: 'IN TRAINING (74%)',
-    statusColor: 'cyan',
-    icon: '🧠',
-  },
-  {
-    id: 3,
-    name: 'Applied Mathematics for Robotics',
-    category: 'Mathematics • Level 201',
-    modules: '15 Units',
-    dateAdded: 'Oct 28, 2023',
-    status: 'SYNC FAIL',
-    statusColor: 'red',
-    icon: '🤖',
-    hasError: true,
-  },
-  {
-    id: 4,
-    name: 'Quantum Physics Fundamentals',
-    category: 'Physics • Level 301',
-    modules: '22 Units',
-    dateAdded: 'Sep 30, 2023',
-    status: 'READY',
-    statusColor: 'blue',
-    icon: '⚛️',
-  },
-]
+interface Course {
+  id: string
+  title: string
+  description?: string
+  videoCount: number
+  transcriptCount: number
+  createdAt: string
+}
 
 export default function AdminDashboardPage() {
-  const [showErrorModal, setShowErrorModal] = useState(false)
+  const [courses, setCourses] = useState<Course[]>([])
+  const [loading, setLoading] = useState(true)
+  const [stats, setStats] = useState({
+    totalCourses: 0,
+    activeTraining: 0,
+    syncErrors: 0,
+  })
+
+  useEffect(() => {
+    const abortController = new AbortController()
+    
+    const fetchCourses = async () => {
+      try {
+        const res = await fetch('/api/admin/courses', {
+          signal: abortController.signal,
+        })
+        if (res.ok) {
+          const data = await res.json()
+          setCourses(data.courses || [])
+          setStats({
+            totalCourses: data.courses?.length || 0,
+            activeTraining: 0,
+            syncErrors: 0,
+          })
+        }
+      } catch (error) {
+        if (error instanceof Error && error.name !== 'AbortError') {
+          console.error('Error fetching courses:', error)
+        }
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchCourses()
+
+    return () => {
+      abortController.abort()
+    }
+  }, [])
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString)
+    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+  }
 
   return (
     <div className="space-y-8">
@@ -75,21 +83,21 @@ export default function AdminDashboardPage() {
         <div className="bg-white rounded-lg p-6 border border-slate-200">
           <p className="text-xs font-semibold text-slate-600 tracking-wide mb-3">TOTAL COURSES</p>
           <div className="flex items-end justify-between">
-            <p className="text-4xl font-bold text-slate-900">24</p>
+            <p className="text-4xl font-bold text-slate-900">{stats.totalCourses}</p>
             <span className="text-2xl">📋</span>
           </div>
         </div>
         <div className="bg-white rounded-lg p-6 border border-slate-200">
           <p className="text-xs font-semibold text-slate-600 tracking-wide mb-3">ACTIVE TRAINING</p>
           <div className="flex items-end justify-between">
-            <p className="text-4xl font-bold text-blue-600">3</p>
+            <p className="text-4xl font-bold text-blue-600">{stats.activeTraining}</p>
             <span className="text-2xl">⚙️</span>
           </div>
         </div>
         <div className="bg-white rounded-lg p-6 border border-slate-200">
           <p className="text-xs font-semibold text-slate-600 tracking-wide mb-3">SYNC ERRORS</p>
           <div className="flex items-end justify-between">
-            <p className="text-4xl font-bold text-red-600">1</p>
+            <p className="text-4xl font-bold text-red-600">{stats.syncErrors}</p>
             <span className="text-2xl">⚠️</span>
           </div>
         </div>
@@ -136,86 +144,63 @@ export default function AdminDashboardPage() {
             </tr>
           </thead>
           <tbody>
-            {DUMMY_COURSES.map((course, idx) => (
-              <tr key={course.id} className={idx < DUMMY_COURSES.length - 1 ? 'border-b border-slate-200' : ''}>
-                <td className="px-6 py-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-teal-100 rounded flex items-center justify-center text-lg">
-                      {course.icon}
-                    </div>
-                    <div>
-                      <p className="font-semibold text-slate-900">{course.name}</p>
-                      <p className="text-xs text-slate-600">{course.category}</p>
-                    </div>
-                  </div>
-                </td>
-                <td className="px-6 py-4 text-slate-700 font-medium">{course.modules}</td>
-                <td className="px-6 py-4 text-slate-700">{course.dateAdded}</td>
-                <td className="px-6 py-4">
-                  {(() => {
-                    let statusClass = 'bg-blue-100 text-blue-700'
-                    if (course.statusColor === 'cyan') {
-                      statusClass = 'bg-cyan-100 text-cyan-700'
-                    } else if (course.statusColor === 'red') {
-                      statusClass = 'bg-red-100 text-red-700'
-                    }
-                    return (
-                      <span className={`inline-flex items-center gap-1 px-3 py-1 rounded text-xs font-semibold ${statusClass}`}>
-                        <span className="w-2 h-2 rounded-full bg-current"></span>
-                        {course.status}
-                      </span>
-                    )
-                  })()}
-                </td>
-                <td className="px-6 py-4">
-                  {course.hasError ? (
-                    <button
-                      onClick={() => setShowErrorModal(true)}
-                      className="text-blue-600 hover:text-blue-700 font-semibold text-xs flex items-center gap-1"
-                    >
-                      🔍 CURATOR AI INSIGHTS
-                    </button>
-                  ) : (
-                    <button className="text-slate-400 text-xs">•••</button>
-                  )}
+            {loading ? (
+              <tr>
+                <td colSpan={5} className="px-6 py-8 text-center text-slate-600">
+                  Loading courses...
                 </td>
               </tr>
-            ))}
+            ) : courses.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="px-6 py-8 text-center text-slate-600">
+                  No courses yet. <Link href="/admin/course-builder" className="text-blue-600 hover:text-blue-700 font-semibold">Create one</Link>
+                </td>
+              </tr>
+            ) : (
+              courses.map((course, idx) => (
+                <tr key={course.id} className={idx < courses.length - 1 ? 'border-b border-slate-200' : ''}>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-teal-100 rounded flex items-center justify-center text-lg">
+                        📚
+                      </div>
+                      <div>
+                        <p className="font-semibold text-slate-900">{course.title}</p>
+                        <p className="text-xs text-slate-600">{course.description || 'No description'}</p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 text-slate-700 font-medium">
+                    {course.videoCount + course.transcriptCount}
+                  </td>
+                  <td className="px-6 py-4 text-slate-700">{formatDate(course.createdAt)}</td>
+                  <td className="px-6 py-4">
+                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded text-xs font-semibold bg-blue-100 text-blue-700">
+                      <span className="w-2 h-2 rounded-full bg-current"></span>
+                      READY
+                    </span>
+                  </td>
+                  <td className="px-6 py-4">
+                    <Link
+                      href={`/admin/content-ingestion?courseId=${course.id}`}
+                      className="text-blue-600 hover:text-blue-700 font-semibold text-xs"
+                    >
+                      Manage
+                    </Link>
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
-        <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 text-xs text-slate-600">
-          Showing 1 to 4 of 24 courses
-        </div>
+        {!loading && courses.length > 0 && (
+          <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 text-xs text-slate-600">
+            Showing 1 to {courses.length} of {stats.totalCourses} courses
+          </div>
+        )}
       </div>
 
-      {/* Error Modal */}
-      {showErrorModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full mx-4">
-            <div className="flex items-start gap-3 mb-4">
-              <span className="text-2xl">🔍</span>
-              <div>
-                <h3 className="font-bold text-slate-900">CURATOR AI INSIGHTS</h3>
-                <p className="text-xs text-slate-600">Applied Mathematics</p>
-              </div>
-            </div>
-            <p className="text-sm text-slate-700 mb-6">
-              Found 1 synchronization error in &quot;Applied Mathematics&quot;. The source PDF has a corrupted header. Would you like to re-upload or skip the first 3 pages?
-            </p>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowErrorModal(false)}
-                className="flex-1 px-4 py-2 border border-slate-300 rounded text-slate-700 font-semibold hover:bg-slate-50 transition"
-              >
-                DISMISS
-              </button>
-              <button className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded transition">
-                FIX ERROR
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Error Modal - Removed for now */}
     </div>
   )
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import Image from 'next/image'
 
@@ -14,6 +14,7 @@ export default function ContentIngestionPage() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const courseId = searchParams.get('courseId')
+  const folderInputRef = useRef<HTMLInputElement>(null)
   
   const [course, setCourse] = useState<Course | null>(null)
   const [loading, setLoading] = useState(true)
@@ -34,6 +35,22 @@ export default function ContentIngestionPage() {
   const [ingesting, setIngesting] = useState(false)
   const [ingestionError, setIngestionError] = useState('')
   const [ingestionSuccess, setIngestionSuccess] = useState(false)
+  const [transcripts, setTranscripts] = useState<Array<{
+    id: string
+    videoId: string
+    fileName: string
+    source: string
+    createdAt: string
+  }>>([])
+  const [loadingTranscripts, setLoadingTranscripts] = useState(false)
+
+  // Set webkitdirectory attribute on folder input
+  useEffect(() => {
+    if (folderInputRef.current) {
+      folderInputRef.current.setAttribute('webkitdirectory', 'true')
+      folderInputRef.current.setAttribute('mozdirectory', 'true')
+    }
+  }, [])
 
   useEffect(() => {
     if (!courseId) {
@@ -41,10 +58,14 @@ export default function ContentIngestionPage() {
       return
     }
 
+    const abortController = new AbortController()
+
     // Fetch course details
     const fetchCourse = async () => {
       try {
-        const res = await fetch(`/api/admin/course/${courseId}`)
+        const res = await fetch(`/api/admin/course/${courseId}`, {
+          signal: abortController.signal,
+        })
         if (res.ok) {
           const data = await res.json()
           setCourse(data.course)
@@ -52,19 +73,106 @@ export default function ContentIngestionPage() {
           router.push('/admin/dashboard')
         }
       } catch (error) {
-        console.error('Error fetching course:', error)
-        router.push('/admin/dashboard')
+        if (error instanceof Error && error.name !== 'AbortError') {
+          console.error('Error fetching course:', error)
+          router.push('/admin/dashboard')
+        }
       } finally {
         setLoading(false)
       }
     }
 
     fetchCourse()
+    fetchTranscripts()
+
+    return () => {
+      abortController.abort()
+    }
   }, [courseId, router])
+
+  const fetchTranscripts = async () => {
+    if (!courseId) return
+
+    setLoadingTranscripts(true)
+    try {
+      const res = await fetch(`/api/admin/transcripts?courseId=${courseId}`)
+      if (res.ok) {
+        const data = await res.json()
+        setTranscripts(data.transcripts || [])
+      }
+    } catch (error) {
+      console.error('Error fetching transcripts:', error)
+    } finally {
+      setLoadingTranscripts(false)
+    }
+  }
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       setUploadedFiles(Array.from(e.target.files))
+    }
+  }
+
+  const handleVTTUpload = async () => {
+    if (uploadedFiles.length === 0) {
+      setIngestionError('Please select VTT files to upload')
+      return
+    }
+
+    setIngesting(true)
+    setIngestionError('')
+    setIngestionSuccess(false)
+
+    try {
+      // Read all VTT files
+      const filesData: Array<{ fileName: string; content: string }> = []
+
+      for (const file of uploadedFiles) {
+        if (file.name.toLowerCase().endsWith('.vtt')) {
+          const content = await file.text()
+          filesData.push({
+            fileName: file.name,
+            content,
+          })
+        }
+      }
+
+      if (filesData.length === 0) {
+        setIngestionError('No valid VTT files found')
+        setIngesting(false)
+        return
+      }
+
+      const res = await fetch('/api/admin/vtt-upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          courseId,
+          files: filesData,
+          overlapTokens: Number(overlapTokens),
+        }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        setIngestionError(data.error || data.message || 'VTT upload failed')
+        return
+      }
+
+      setIngestionSuccess(true)
+      setUploadedFiles([])
+      // Refresh transcripts list
+      await fetchTranscripts()
+      // Optionally redirect after success
+      setTimeout(() => {
+        router.push('/admin/dashboard')
+      }, 2000)
+    } catch (error) {
+      console.error('Error during VTT upload:', error)
+      setIngestionError('An error occurred during VTT upload')
+    } finally {
+      setIngesting(false)
     }
   }
 
@@ -310,20 +418,33 @@ export default function ContentIngestionPage() {
               <span className="text-2xl">🔒</span>
             </div>
             <div className="text-center">
-              <p className="font-semibold text-slate-900 mb-1">Drop VTT files here</p>
+              <p className="font-semibold text-slate-900 mb-1">Drop VTT files or folder here</p>
               <p className="text-xs text-slate-600">Maximum file size: 50MB. Only .vtt formats supported.</p>
             </div>
-            <label htmlFor="vtt-upload" className="px-6 py-2 border border-slate-300 rounded text-slate-700 font-semibold hover:bg-white transition cursor-pointer text-sm">
-              SELECT FILES
-              <input
-                id="vtt-upload"
-                type="file"
-                multiple
-                accept=".vtt"
-                onChange={handleFileUpload}
-                className="hidden"
-              />
-            </label>
+            <div className="flex gap-2">
+              <label htmlFor="vtt-upload" className="px-6 py-2 border border-slate-300 rounded text-slate-700 font-semibold hover:bg-white transition cursor-pointer text-sm">
+                SELECT FILES
+                <input
+                  id="vtt-upload"
+                  type="file"
+                  multiple
+                  accept=".vtt"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                />
+              </label>
+              <label htmlFor="vtt-folder" className="px-6 py-2 border border-slate-300 rounded text-slate-700 font-semibold hover:bg-white transition cursor-pointer text-sm">
+                SELECT FOLDER
+                <input
+                  ref={folderInputRef}
+                  id="vtt-folder"
+                  type="file"
+                  multiple
+                  onChange={handleFileUpload}
+                  className="hidden"
+                />
+              </label>
+            </div>
           </div>
 
           {/* Uploaded Files */}
@@ -350,13 +471,24 @@ export default function ContentIngestionPage() {
             </div>
             <h3 className="font-bold text-slate-900">Knowledge Fragmentation</h3>
           </div>
-          <button
-            onClick={handleStartIngestion}
-            disabled={ingesting}
-            className="px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold rounded transition text-sm flex items-center gap-2"
-          >
-            {ingesting ? 'Processing...' : 'Finalize & Start Training'} 🚀
-          </button>
+          <div className="flex gap-2">
+            {uploadedFiles.length > 0 && (
+              <button
+                onClick={handleVTTUpload}
+                disabled={ingesting}
+                className="px-6 py-3 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white font-semibold rounded transition text-sm flex items-center gap-2"
+              >
+                {ingesting ? 'Uploading...' : 'Upload VTT Files'} 📤
+              </button>
+            )}
+            <button
+              onClick={handleStartIngestion}
+              disabled={ingesting || !playlistUrl}
+              className="px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold rounded transition text-sm flex items-center gap-2"
+            >
+              {ingesting ? 'Processing...' : 'Finalize & Start Training'} 🚀
+            </button>
+          </div>
         </div>
 
         {ingestionError && (
@@ -407,8 +539,60 @@ export default function ContentIngestionPage() {
       {/* Uploaded Transcripts Section */}
       <div className="space-y-4">
         <p className="text-xs font-bold text-slate-600 tracking-wide">UPLOADED TRANSCRIPTS</p>
-        <div className="bg-slate-50 rounded-lg p-6 border border-slate-200">
-          <p className="text-sm text-slate-600 text-center py-8">No transcripts uploaded yet</p>
+        <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+          {loadingTranscripts ? (
+            <div className="p-6 text-center text-slate-600">
+              Loading transcripts...
+            </div>
+          ) : transcripts.length === 0 ? (
+            <div className="p-6 text-center text-slate-600">
+              No transcripts uploaded yet
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-slate-50 border-b border-slate-200">
+                  <tr>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 tracking-wide">VIDEO ID</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 tracking-wide">FILE NAME</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 tracking-wide">SOURCE</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 tracking-wide">UPLOADED</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {transcripts.map((transcript, idx) => (
+                    <tr key={transcript.id} className={idx < transcripts.length - 1 ? 'border-b border-slate-200' : ''}>
+                      <td className="px-6 py-4 text-sm text-slate-900 font-medium">{transcript.videoId}</td>
+                      <td className="px-6 py-4 text-sm text-slate-700">{transcript.fileName}</td>
+                      <td className="px-6 py-4">
+                        <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-semibold ${
+                          transcript.source === 'vtt' 
+                            ? 'bg-blue-100 text-blue-700' 
+                            : 'bg-purple-100 text-purple-700'
+                        }`}>
+                          {transcript.source.toUpperCase()}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-sm text-slate-600">
+                        {new Date(transcript.createdAt).toLocaleDateString('en-US', { 
+                          year: 'numeric', 
+                          month: 'short', 
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {transcripts.length > 0 && (
+            <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 text-xs text-slate-600">
+              Total: {transcripts.length} transcript(s)
+            </div>
+          )}
         </div>
       </div>
     </div>

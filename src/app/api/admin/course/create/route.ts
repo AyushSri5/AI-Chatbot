@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
     // Decode JWT token to get user ID
     let userId: string
     try {
-      const decoded = verify(token, process.env.JWT_SECRET || 'fallback_secret') as any
+      const decoded = verify(token, process.env.JWT_SECRET || 'fallback_secret') as { id: string; role: string }
       userId = decoded.id
       
       // Verify user is admin
@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
           { status: 403 }
         )
       }
-    } catch (err) {
+    } catch {
       return NextResponse.json(
         { error: 'Invalid token' },
         { status: 401 }
@@ -40,6 +40,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { error: 'All fields are required' },
         { status: 400 }
+      )
+    }
+
+    // Verify user exists in database
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    })
+
+    if (!user) {
+      return NextResponse.json(
+        { error: 'User not found' },
+        { status: 404 }
       )
     }
 
@@ -60,6 +72,7 @@ export async function POST(req: NextRequest) {
           title: course.title,
           description: course.description,
           createdBy: course.createdBy,
+          createdAt: course.createdAt.toISOString(),
         },
       },
       { status: 201 }

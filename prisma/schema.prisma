@@ -25,12 +25,14 @@ model Course {
   title       String
   description String?
   createdBy   String
+  createdAt   DateTime        @default(now())
   creator     User            @relation("CreatedBy", fields: [createdBy], references: [id], onDelete: Cascade)
 
   videos      Video[]
   access      CourseAccess[]
   chatHistory ChatHistory[]
   vectorCollections VectorCollection[]
+  transcripts Transcript[]
 }
 
 model Video {
@@ -78,4 +80,19 @@ model VectorCollection {
   collectionName String
 
   course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+}
+
+model Transcript {
+  id          String   @id @default(cuid())
+  videoId     String
+  courseId    String
+  fileName    String
+  content     String   @db.Text
+  source      String   @default("vtt") // "vtt" or "youtube"
+  createdAt   DateTime @default(now())
+
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@index([courseId])
+  @@index([videoId])
 }

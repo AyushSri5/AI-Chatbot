@@ -34,11 +34,11 @@ export async function extractVideoTranscript(videoId: string): Promise<VideoTran
     }
 
     // Convert transcript entries to our format
-    const entries: TranscriptEntry[] = transcript.map((entry: any) => ({
-      text: entry.text,
-      startTime: entry.offset || 0,
-      endTime: (entry.offset || 0) + (entry.duration || 0),
-      duration: entry.duration || 0,
+    const entries: TranscriptEntry[] = transcript.map((entry: Record<string, unknown>) => ({
+      text: String(entry.text || ''),
+      startTime: Number(entry.offset || 0),
+      endTime: Number((entry.offset || 0) as number) + Number(entry.duration || 0),
+      duration: Number(entry.duration || 0),
     }))
 
     // Combine all text
@@ -58,22 +58,49 @@ export async function extractVideoTranscript(videoId: string): Promise<VideoTran
 
 /**
  * Extracts transcripts from multiple YouTube videos
+ * Processes sequentially to minimize memory usage
  */
 export async function extractVideoTranscripts(videoIds: string[]): Promise<VideoTranscript[]> {
   const transcripts: VideoTranscript[] = []
+  const maxRetries = 3
 
   for (let i = 0; i < videoIds.length; i++) {
     console.log(`Processing video ${i + 1}/${videoIds.length}...`)
 
-    const transcript = await extractVideoTranscript(videoIds[i])
+    let retries = 0
+    let transcript: VideoTranscript | null = null
 
-    if (transcript) {
-      transcripts.push(transcript)
+    while (retries < maxRetries && !transcript) {
+      try {
+        transcript = await extractVideoTranscript(videoIds[i])
+        if (transcript) {
+          transcripts.push(transcript)
+        }
+      } catch (error) {
+        retries++
+        if (retries < maxRetries) {
+          console.warn(`Retry ${retries}/${maxRetries} for video ${videoIds[i]}`)
+          await new Promise((resolve) => setTimeout(resolve, 1000 * retries))
+        } else {
+          console.error(`Failed to extract transcript for video ${videoIds[i]}:`, error)
+        }
+      }
+    }
+
+    if (!transcript) {
+      console.warn(`Failed to extract transcript for video ${videoIds[i]} after ${maxRetries} retries`)
     }
 
     // Add delay to avoid rate limiting
     if (i < videoIds.length - 1) {
       await new Promise((resolve) => setTimeout(resolve, 1000))
+    }
+
+    // Periodically allow garbage collection
+    if ((i + 1) % 10 === 0) {
+      if (global.gc) {
+        global.gc()
+      }
     }
   }
 

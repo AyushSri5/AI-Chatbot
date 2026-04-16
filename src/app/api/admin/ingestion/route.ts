@@ -288,15 +288,26 @@ export async function POST(req: NextRequest): Promise<NextResponse<IngestionResp
           const batch = allChunks.slice(i, i + batchSize)
           console.log(`Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(allChunks.length / batchSize)} (${batch.length} chunks)...`)
 
-          // Generate embeddings for this batch
-          const batchEmbeddings = await generateEmbeddings(batch)
-          embeddingsGenerated += batchEmbeddings.length
+          try {
+            // Generate embeddings for this batch
+            const batchEmbeddings = await generateEmbeddings(batch)
+            embeddingsGenerated += batchEmbeddings.length
 
-          // Store embeddings in Qdrant immediately
-          await storeEmbeddingsInVectorDB(collectionName, batchEmbeddings)
+            // Store embeddings in Qdrant immediately
+            await storeEmbeddingsInVectorDB(collectionName, batchEmbeddings)
 
-          console.log(`Stored ${batchEmbeddings.length} embeddings in batch ${Math.floor(i / batchSize) + 1}`)
+            console.log(`Stored ${batchEmbeddings.length} embeddings in batch ${Math.floor(i / batchSize) + 1}`)
+
+            // Explicitly clear batch data to free memory
+            batchEmbeddings.length = 0
+          } catch (batchError) {
+            console.error(`Error processing batch ${Math.floor(i / batchSize) + 1}:`, batchError)
+            throw batchError
+          }
         }
+
+        // Clear allChunks after processing
+        allChunks.length = 0
 
         console.log(`Generated and stored ${embeddingsGenerated} embeddings for course ${courseId}`)
         console.log(`Vector collection: ${collectionName} (ID: ${vectorCollection.id})`)
