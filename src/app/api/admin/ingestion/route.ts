@@ -93,16 +93,25 @@ function processTranscripts(
   }>,
   overlapTokens: number
 ): Array<{ content: string; videoId: string; chunkIndex: number }> {
+  console.log(`[CHUNKING] Starting to process ${transcripts.length} transcripts`)
   const allChunks: Array<{ content: string; videoId: string; chunkIndex: number }> = []
 
   for (const transcript of transcripts) {
+    console.log(`[CHUNKING] Processing transcript for video: ${transcript.videoId}`)
+    console.log(`[CHUNKING] Original text length: ${transcript.fullText.length} characters`)
+    console.log(`[CHUNKING] Original text preview (first 300 chars): "${transcript.fullText.substring(0, 300)}..."`)
+
     const cleanedText = cleanText(transcript.fullText)
+    console.log(`[CHUNKING] Cleaned text length: ${cleanedText.length} characters`)
+    console.log(`[CHUNKING] Cleaned text preview (first 300 chars): "${cleanedText.substring(0, 300)}..."`)
 
     if (cleanedText.length === 0) {
+      console.warn(`[CHUNKING] Cleaned text is empty for video: ${transcript.videoId}`)
       continue
     }
 
     const textChunks = chunkText(cleanedText, 512, overlapTokens)
+    console.log(`[CHUNKING] Created ${textChunks.length} chunks for video: ${transcript.videoId}`)
 
     for (let i = 0; i < textChunks.length; i++) {
       allChunks.push({
@@ -110,9 +119,21 @@ function processTranscripts(
         videoId: transcript.videoId,
         chunkIndex: i,
       })
+      
+      // Log first 3 chunks
+      if (i < 3) {
+        console.log(`[CHUNKING] Chunk ${i} for ${transcript.videoId} (length: ${textChunks[i].length}): "${textChunks[i].substring(0, 150)}..."`)
+      }
+    }
+    
+    // Log last chunk
+    if (textChunks.length > 3) {
+      const lastIdx = textChunks.length - 1
+      console.log(`[CHUNKING] Chunk ${lastIdx} for ${transcript.videoId} (length: ${textChunks[lastIdx].length}): "${textChunks[lastIdx].substring(0, 150)}..."`)
     }
   }
 
+  console.log(`[CHUNKING] Total chunks created: ${allChunks.length}`)
   return allChunks
 }
 
@@ -207,17 +228,21 @@ export async function POST(req: NextRequest): Promise<NextResponse<IngestionResp
     const allChunks: Array<{ content: string; videoId: string; chunkIndex: number }> = []
 
     if (videos.length > 0) {
-      console.log(`Extracting transcripts from ${videos.length} videos...`)
+      console.log(`[INGESTION] Extracting transcripts from ${videos.length} videos...`)
 
       const videoIds = videos.map((v) => {
         const match = /v=([^&]+)/.exec(v.url)
         return match ? match[1] : v.id
       })
 
+      console.log(`[INGESTION] Extracted video IDs: ${videoIds.join(', ')}`)
+
       const transcripts = await extractVideoTranscripts(videoIds)
 
+      console.log(`[INGESTION] Successfully extracted ${transcripts.length} transcripts`)
+
       if (transcripts.length > 0) {
-        console.log(`Successfully extracted ${transcripts.length} transcripts`)
+        console.log(`[INGESTION] Starting to process transcripts for chunking...`)
 
         const transcriptChunks = processTranscripts(
           transcripts.map((t) => ({
@@ -229,8 +254,9 @@ export async function POST(req: NextRequest): Promise<NextResponse<IngestionResp
 
         allChunks.push(...transcriptChunks)
         chunksCreated = transcriptChunks.length
+        console.log(`[INGESTION] Total chunks created: ${chunksCreated}`)
       } else {
-        console.warn('No transcripts could be extracted from videos')
+        console.warn('[INGESTION] No transcripts could be extracted from videos')
         return NextResponse.json(
           { success: false, message: 'Failed to extract transcripts from any videos', error: 'No transcripts available' },
           { status: 400 }

@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verify } from 'jsonwebtoken'
+import { OpenAI } from 'openai'
 import { prisma } from '@/lib/prisma'
 import { generateEmbedding } from '@/lib/embeddings'
 import { searchEmbeddings } from '@/lib/qdrant'
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+})
 
 interface SearchRequest {
   courseId: string
@@ -23,16 +28,67 @@ interface SearchResponse {
   success: boolean
   message: string
   data?: {
-    results: SearchResult[]
+    answer: string
+    sources: SearchResult[]
     collectionId: string
-    queryEmbedding: number[]
   }
   error?: string
 }
 
 /**
- * Verifies student authorization
+ * Generates an answer using LLM based on context from search results
  */
+async function generateAnswer(query: string, context: SearchResult[]): Promise<string> {
+  if (context.length === 0) {
+    return 'No relevant information found in the course materials to answer your question.'
+  }
+
+  // Combine context from search results
+  const contextText = context
+    .map((result, idx) => `[Source ${idx + 1}] ${result.text}`)
+    .join('\n\n')
+
+  const systemPrompt = `You are an intelligent educational assistant helping students learn from course materials. 
+Your role is to:
+1. Answer questions accurately based on the provided course context
+2. Cite specific sources when referencing information
+3. Explain concepts clearly and concisely
+4. If the context doesn't contain enough information, acknowledge this and provide general knowledge if helpful
+5. Maintain an encouraging and supportive tone
+
+Always prioritize accuracy and only use information from the provided context. If information is not in the context, clearly state that.`
+
+  const userMessage = `Based on the following course materials, please answer this question: "${query}"
+
+Course Materials:
+${contextText}
+
+Please provide a clear, concise answer based on the materials above.`
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        {
+          role: 'system',
+          content: systemPrompt,
+        },
+        {
+          role: 'user',
+          content: userMessage,
+        },
+      ],
+      temperature: 0.7,
+      max_tokens: 1000,
+    })
+
+    const answer = response.choices[0]?.message?.content || 'Unable to generate answer'
+    return answer
+  } catch (error) {
+    console.error('Error generating answer:', error)
+    throw error
+  }
+}
 async function verifyStudentAuth(token: string | undefined): Promise<{ userId: string } | { error: string; status: number }> {
   if (!token) {
     return { error: 'Missing token', status: 401 }
@@ -145,14 +201,24 @@ export async function POST(req: NextRequest): Promise<NextResponse<SearchRespons
 
     console.log(`Found ${formattedResults.length} results for query`)
 
+    // Generate answer using LLM with context
+    let answer = ''
+    try {
+      answer = await generateAnswer(query, formattedResults)
+      console.log('Generated answer successfully')
+    } catch (error) {
+      console.error('Error generating answer:', error)
+      answer = 'Unable to generate answer at this time. Please try again later.'
+    }
+
     return NextResponse.json(
       {
         success: true,
-        message: `Found ${formattedResults.length} relevant result(s)`,
+        message: 'Answer generated successfully',
         data: {
-          results: formattedResults,
+          answer,
+          sources: formattedResults,
           collectionId: vectorCollection.id,
-          queryEmbedding: queryEmbedding.vector,
         },
       },
       { status: 200 }
