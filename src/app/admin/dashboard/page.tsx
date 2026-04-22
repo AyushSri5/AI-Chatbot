@@ -22,6 +22,7 @@ export default function AdminDashboardPage() {
   })
   const [showAssignModal, setShowAssignModal] = useState(false)
   const [showUnassignModal, setShowUnassignModal] = useState(false)
+  const [showEnrolledModal, setShowEnrolledModal] = useState(false)
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null)
   const [students, setStudents] = useState<Array<{
     id: string
@@ -94,6 +95,13 @@ export default function AdminDashboardPage() {
     await fetchAssignedStudents(course.id)
   }
 
+  const handleViewEnrolledClick = async (course: Course) => {
+    setSelectedCourse(course)
+    setShowEnrolledModal(true)
+    setSelectedStudents(new Set())
+    await fetchAssignedStudents(course.id)
+  }
+
   const fetchStudents = async () => {
     setLoadingStudents(true)
     try {
@@ -112,14 +120,10 @@ export default function AdminDashboardPage() {
   const fetchAssignedStudents = async (courseId: string) => {
     setLoadingStudents(true)
     try {
-      const res = await fetch('/api/admin/students?limit=100')
+      const res = await fetch(`/api/admin/course/${courseId}/students?limit=100`)
       if (res.ok) {
         const data = await res.json()
-        // Filter to show only students assigned to this course
-        const allStudents = data.students || []
-        // In a real scenario, you'd fetch students specifically assigned to this course
-        // For now, we'll show all students and let the admin select who to unassign
-        setAssignedStudents(allStudents)
+        setAssignedStudents(data.students || [])
       }
     } catch (error) {
       console.error('Error fetching assigned students:', error)
@@ -358,6 +362,12 @@ export default function AdminDashboardPage() {
                         className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded text-xs flex items-center gap-1 transition"
                       >
                         ✓ ASSIGN
+                      </button>
+                      <button
+                        onClick={() => handleViewEnrolledClick(course)}
+                        className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded text-xs flex items-center gap-1 transition"
+                      >
+                        👥 VIEW
                       </button>
                       <button
                         onClick={() => handleUnassignClick(course)}
@@ -600,6 +610,120 @@ export default function AdminDashboardPage() {
                 className="px-6 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-semibold rounded transition"
               >
                 {assignmentLoading ? 'Unassigning...' : `Confirm Unassignment (${selectedStudents.size})`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* View Enrolled Users Modal */}
+      {showEnrolledModal && selectedCourse && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            {/* Header */}
+            <div className="sticky top-0 bg-linear-to-r from-green-50 to-emerald-50 border-b border-green-200 p-6">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-xs font-bold text-green-600 tracking-wide mb-2">ENROLLMENT MANAGEMENT</p>
+                  <h2 className="text-2xl font-bold text-slate-900">Enrolled Students</h2>
+                  <p className="text-sm text-slate-600 mt-1">{selectedCourse.title}</p>
+                </div>
+                <button
+                  onClick={() => setShowEnrolledModal(false)}
+                  className="text-slate-400 hover:text-slate-600 text-2xl"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="p-6">
+              {loadingStudents ? (
+                <div className="text-center py-12 text-slate-600">Loading enrolled students...</div>
+              ) : assignedStudents.length === 0 ? (
+                <div className="text-center py-12">
+                  <div className="text-5xl mb-4">👥</div>
+                  <p className="text-slate-600 mb-2 font-semibold">No students enrolled yet</p>
+                  <p className="text-sm text-slate-500">Assign students to this course to see them here</p>
+                </div>
+              ) : (
+                <div>
+                  <div className="mb-6 flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-700">
+                        Total Enrolled: <span className="text-green-600 text-lg">{assignedStudents.length}</span>
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {assignedStudents.map((student) => (
+                      <div
+                        key={student.id}
+                        className="bg-linear-to-br from-slate-50 to-slate-100 rounded-lg p-4 border border-slate-200 hover:shadow-md transition"
+                      >
+                        <div className="flex items-start gap-3 mb-3">
+                          <div className="w-10 h-10 rounded-full bg-linear-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white font-semibold text-sm">
+                            {student.email.charAt(0).toUpperCase()}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold text-slate-900 truncate">{student.email}</p>
+                            <p className="text-xs text-slate-600 capitalize">{student.role}</p>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2 pt-3 border-t border-slate-200">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-slate-600">Credits</span>
+                            <span className="text-sm font-semibold text-slate-900">{student.credits}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-slate-600">Courses</span>
+                            <span className="text-sm font-semibold text-slate-900">{student.coursesEnrolled}</span>
+                          </div>
+                        </div>
+
+                        <div className="mt-3 pt-3 border-t border-slate-200">
+                          <div className="inline-flex items-center gap-1 px-2 py-1 rounded bg-green-100 text-green-700 text-xs font-semibold">
+                            <span className="w-2 h-2 rounded-full bg-green-600"></span>
+                            Enrolled
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Stats Footer */}
+                  <div className="mt-8 grid grid-cols-3 gap-4 pt-6 border-t border-slate-200">
+                    <div className="text-center">
+                      <p className="text-2xl font-bold text-slate-900">{assignedStudents.length}</p>
+                      <p className="text-xs text-slate-600 mt-1">Total Students</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-2xl font-bold text-blue-600">
+                        {assignedStudents.reduce((sum, s) => sum + s.credits, 0)}
+                      </p>
+                      <p className="text-xs text-slate-600 mt-1">Total Credits</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-2xl font-bold text-purple-600">
+                        {Math.round(assignedStudents.reduce((sum, s) => sum + s.coursesEnrolled, 0) / assignedStudents.length)}
+                      </p>
+                      <p className="text-xs text-slate-600 mt-1">Avg Courses</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="sticky bottom-0 bg-slate-50 border-t border-slate-200 p-6 flex gap-3 justify-end">
+              <button
+                onClick={() => setShowEnrolledModal(false)}
+                className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded transition"
+              >
+                Close
               </button>
             </div>
           </div>

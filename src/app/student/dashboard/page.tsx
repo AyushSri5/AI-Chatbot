@@ -15,7 +15,7 @@ interface Course {
 export default function StudentDashboardPage() {
   const [courses, setCourses] = useState<Course[]>([])
   const [loading, setLoading] = useState(true)
-  const [credits] = useState(120)
+  const [credits, setCredits] = useState(0)
   const [userName, setUserName] = useState('Alex')
 
   useEffect(() => {
@@ -32,19 +32,14 @@ export default function StudentDashboardPage() {
           setCourses(data.courses || [])
         }
 
-        // Get user info from token
-        const token = document.cookie
-          .split('; ')
-          .find((row) => row.startsWith('token='))
-          ?.split('=')[1]
-
-        if (token) {
-          try {
-            const decoded = JSON.parse(atob(token.split('.')[1]))
-            setUserName(decoded.email?.split('@')[0] || 'Alex')
-          } catch (e) {
-            console.error('Error decoding token:', e)
-          }
+        // Fetch student profile with real credits
+        const profileRes = await fetch('/api/student/profile', {
+          signal: abortController.signal,
+        })
+        if (profileRes.ok) {
+          const profileData = await profileRes.json()
+          setCredits(profileData.credits || 0)
+          setUserName(profileData.email?.split('@')[0] || 'Alex')
         }
       } catch (error) {
         if (error instanceof Error && error.name !== 'AbortError') {
@@ -100,18 +95,18 @@ export default function StudentDashboardPage() {
                     fill="none"
                     stroke="#2563eb"
                     strokeWidth="8"
-                    strokeDasharray={`${(45 / 100) * 2 * Math.PI * 54} ${2 * Math.PI * 54}`}
+                    strokeDasharray={`${(Math.min(credits, 100) / 100) * 2 * Math.PI * 54} ${2 * Math.PI * 54}`}
                     strokeLinecap="round"
                   />
                 </svg>
                 <div className="absolute text-center">
-                  <p className="text-3xl font-bold text-slate-900">45</p>
-                  <p className="text-xs text-slate-600">USED</p>
+                  <p className="text-3xl font-bold text-slate-900">{credits}</p>
+                  <p className="text-xs text-slate-600">AVAILABLE</p>
                 </div>
               </div>
               <div className="mt-4 text-center">
                 <p className="font-semibold text-slate-900">AI Credits</p>
-                <p className="text-xs text-slate-600">55 Credits remaining this month</p>
+                <p className="text-xs text-slate-600">{credits} Credits available</p>
               </div>
             </div>
           </div>
@@ -120,7 +115,7 @@ export default function StudentDashboardPage() {
         {/* Credits Display */}
         <div className="mb-8 flex items-center justify-between bg-white rounded-lg p-4 border border-slate-200">
           <div>
-            <p className="text-sm font-semibold text-slate-700">Credits: {credits}</p>
+            <p className="text-sm font-semibold text-slate-700">Credits: <span className="text-blue-600 text-lg">{credits}</span></p>
           </div>
         </div>
 
