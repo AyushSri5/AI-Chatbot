@@ -26,7 +26,7 @@ export default function DashboardLayout({ children }: Readonly<{ children: React
         { icon: '📊', label: 'Dashboard', href: '/admin/dashboard', id: 'dashboard' },
         { icon: '🔨', label: 'Course Builder', href: '/admin/course-builder', id: 'builder' },
         { icon: '👥', label: 'Users & Credits', href: '/admin/users', id: 'users' },
-        { icon: '📚', label: 'Content Hub', href: '#', id: 'content' },
+        { icon: '📝', label: 'Transaction History', href: '/admin/transactions', id: 'transactions' },
         { icon: '📈', label: 'Student Analytics', href: '#', id: 'analytics' },
         { icon: '⚙️', label: 'AI Settings', href: '#', id: 'settings' },
       ]

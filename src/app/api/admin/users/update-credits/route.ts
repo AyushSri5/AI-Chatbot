@@ -94,6 +94,20 @@ export async function POST(req: NextRequest): Promise<NextResponse<UpdateCredits
       data: { credits: newCredits },
     })
 
+    // Log the transaction
+    try {
+      await prisma.creditTransaction.create({
+        data: {
+          userId,
+          creditsUsed: operation === 'set' ? credits : operation === 'add' ? credits : -credits,
+          type: operation === 'set' ? 'set' : operation === 'add' ? 'add' : 'subtract',
+        },
+      })
+      console.log(`[TRANSACTION] Logged transaction for user ${userId}: ${operation} ${credits} credits`)
+    } catch (txError) {
+      console.error('[TRANSACTION] Error logging transaction:', txError)
+    }
+
     console.log(`[ADMIN] Updated credits for user ${userId}: ${user.credits} -> ${newCredits} (operation: ${operation})`)
 
     return NextResponse.json(
